@@ -1,7 +1,3 @@
----
-
----
-
 # ceRticates
 
 * Check [to-do list](TODO.md)
