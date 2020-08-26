@@ -1,0 +1,15 @@
+Package: ceRtificates
+Title: Generate Conference Certificates
+Version: 0.0.0.9000
+Authors@R: person("Lucio", "Rezende Queiroz",
+                  email = "luciorqueiroz@gmail.com",
+                  role = c("aut", "cre")
+                  )
+Description: Package intended for generating Conference Certificates
+             using templates based on markdown and web technologies
+Depends: R (>= 3.1.0)
+License: ?
+LazyData: true
+Remotes: github::hrbrmstr/qrencoder
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.1.1
