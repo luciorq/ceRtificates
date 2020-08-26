@@ -3,11 +3,13 @@
 #'   execution
 #' @export
 clean_project <- function(clean = FALSE, prev_wd) {
-  setwd(prev_wd)
+  if (!is.null(prev_wd)) {
+    setwd(prev_wd)
+  }
   if (isTRUE(clean)){
-    fs::dir_delete("temp")
-    fs::dir_delete("certs")
-    fs::dir_delete("temp_repo")
+    fs::dir_delete(fs::path("temp"))
+    fs::dir_delete(fs::path("certs"))
+    fs::dir_delete(fs::path("temp_repo"))
   }
 }
 
