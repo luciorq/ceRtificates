@@ -9,75 +9,103 @@ import_gsheets <- function() {
 
 }
 
+#' Import course and workshops description
+#' @inheritParams import_table
+#' @export
+import_course_table <- function(event_data) {
+  course_table <- event_data$participant_table$path %>%
+    readxl::read_xlsx(sheet = "course_lookup") %>%
+    dplyr::mutate(edition = event_data$edition)
+  return(course_table)
+}
 #' Read Atendes's table from Excel file
 #' @param input_table Path to a XLSX file containing presence
 #'   it can contain separate tabs/sheets for each course or category
 #' @inheritParams import_table
 #' @export
-import_excel <- function(input_table, course_table) {
-
-  participants_file <- input_table
-  sheets_df <- course_table
+import_excel <- function(event_data) {
+  participants_file <- event_data$participant_table$path
+  course_table <- import_course_table(event_data)
 
   if (!isTRUE(readxl::excel_format(participants_file) == "xlsx")) {
-    stop("File is not a correctly fomated XLSX file.")
+    stop("File is not a correctly formated XLSX file.")
   }
+
+  categories_vector <- unique(event_data$cert_type)
   sheets_vector <- readxl::excel_sheets(participants_file)
+  sheets_vector <- sheets_vector[!stringr::str_detect(sheets_vector, "_lookup$")]
 
-  # retrieve main event certs
-  main_event_course <- dplyr::pull(dplyr::filter(sheets_df, course %in% "Evento Principal"), sheet_name)
-  main_event_df <- readxl::read_xlsx(participants_file, sheet = main_event_course) %>%
-    dplyr::mutate(sheet_name = main_event_course) %>%
-    dplyr::left_join(
-      dplyr::filter(sheets_df, sheet_name %in% main_event_course),
-      by = "sheet_name"
-    ) %>%
-    dplyr::select(-sheet_name) %>%
-    dplyr::rename(`Presença` = Credenciamento)
+  categories_list <- list()
+  # i = categories_vector[1]; j = sheets_vector[1]
+  for (i in categories_vector) {
+    category_df <- tibble::tibble()
+    for (j in sheets_vector) {
+      temp_df <- readxl::read_xlsx(participants_file, sheet = j)
+      if (isTRUE(i == j) && !any(colnames(temp_df) %in% "category")) {
+        temp_df <- temp_df %>%
+          dplyr::mutate(category = i)
+      }
+      # Check for registration in the main event
+      if (any(colnames(temp_df) %in% "registration")) {
+        temp_df <- temp_df %>%
+          dplyr::filter(registration %in% event_data$registration)
+      }
+      # Check for absence in workshops
+      if (any(colnames(temp_df) %in% "attendance")) {
+        temp_df <- temp_df %>%
+          dplyr::filter(attendance %in% event_data$attendance)
+      }
+      category_df <- dplyr::bind_rows(category_df, temp_df)
+    }
+    category_df <- category_df %>%
+      dplyr::filter(category %in% i) %>%
+      dplyr::distinct()
+    categories_list[[i]] <- category_df
+  }
+  #categories_list$monitor_minicurso %>% View()
 
-  # retrieve courses lists
-  sheets_df <- sheets_df %>%
-    dplyr::filter(!(category %in% "not_used")) %>%
-    dplyr::filter(!(course %in% "Evento Principal"))
-
-  participant_df <- tibble::tibble()
-  # i <- sheets_df$sheet_name[1]
-  for (i in sheets_df$sheet_name){
-    temp_participant_df <- readxl::read_xlsx(participants_file, sheet = i)
-    temp_participant_df <- temp_participant_df %>%
-      dplyr::select(`Presença`, `Nome do Aluno`, `Email`, `Minicurso`) %>%
-      dplyr::mutate(sheet_name = i)
-    temp_participant_df <- temp_participant_df %>%
-      dplyr::left_join(
-        dplyr::filter(sheets_df, sheet_name %in% i),
-        by = c("sheet_name")
-      ) %>%
-      dplyr::select(-sheet_name)
-    participant_df <- dplyr::bind_rows(participant_df, temp_participant_df)
+  # function to remove all NA cols
+  drop_na_cols <- function(x_df) {
+    for (i in colnames(x_df)) {
+      if (all(is.na(dplyr::pull(x_df, {{ i }})))) {
+        x_df <- x_df %>%
+          dplyr::select(-{{ i }})
+      }
+    }
+    return(x_df)
   }
 
-  participant_df <- participant_df %>%
-    dplyr::bind_rows(main_event_df)
-
-  return(participant_df)
+  # flatten categories list
+  full_df <- tibble::tibble()
+  for (i in names(categories_list)) {
+    temp_df <- categories_list[[i]] %>%
+      dplyr::select(name, email, course_name, category) %>%
+      drop_na_cols() %>%
+      dplyr::left_join(course_table) %>%
+      dplyr::distinct()
+    full_df <- dplyr::bind_rows(full_df, temp_df)
+  }
+  return(full_df)
 }
 
 #' Format input table
+#' @param event_data event data imported from YAML config file
 #' @param input_table A Google Sheets code or XLSX file path containing sheets
 #'   organized with sheets for each category of certificate
 #' @param course_table `tibble`, `data.frame` or coercible object,
 #'   containing course description
-#' @param ext Default = ".xlsx"; File extension used for input table,
-#'   can be replaced to Google Sheets(.gsheet)
+#' @param ext Default = "xlsx"; File extension used for input table,
+#'   can be replaced to Google Sheets(gs gsheet)
 #' @export
-import_table <- function(input_table, course_table, ext = c(".xlsx", ".gs")) {
+import_table <- function(event_data) {
   # file converted from Google Sheets
-  participants_file <- input_table
-  sheets_df <- course_table
-  if (isTRUE(ext == ".xlsx")) {
-    participant_df <- import_excel(input_table, course_table)
-  } else if (isTRUE(ext == ".gs")) {
-    participant_df <- import_gsheets(input_table)
+  participants_file <- event_data$participant_table$path
+  ext <- event_data$participant_table$ext
+
+  if (isTRUE(ext == "xlsx")) {
+    participant_df <- import_excel(event_data)
+  } else if (isTRUE(ext == "gs")) {
+    participant_df <- import_gsheets(event_data)
   } else {
     stop("File extension not known.")
   }
@@ -86,15 +114,15 @@ import_table <- function(input_table, course_table, ext = c(".xlsx", ".gs")) {
   email_regex <- "^[[:alnum:].\\-_]+@[[:alnum:].\\-]+$"
   # Format strings
   participant_table <- participant_df %>%
-    dplyr::filter(`Presença` %in% c("Presente", "Realizado")) %>%
-    dplyr::mutate(participant_name = stringr::str_to_title(`Nome do Aluno`)) %>%
+    # dplyr::filter(`Presença` %in% c("Presente", "Realizado")) %>%
+    dplyr::mutate(participant_name = stringr::str_to_title(name)) %>%
     dplyr::mutate(participant_name = stringr::str_squish(participant_name)) %>%
-    dplyr::mutate(valid_email = stringr::str_match(`Email`, email_regex)) %>%
+    dplyr::mutate(valid_email = stringr::str_match(email, email_regex)) %>%
     dplyr::mutate(valid_email = as.vector(.$valid_email)) %>%
     dplyr::mutate(valid_email = stringr::str_to_lower(valid_email)) %>%
-    dplyr::mutate(course_name = stringr::str_squish(Minicurso)) %>%
+    dplyr::mutate(course_name = stringr::str_squish(course_name)) %>%
     dplyr::select(
-      course, category, valid_email,
+      course_name, category, valid_email,
       participant_name,
       event_date, cert_hours, edition
     )
