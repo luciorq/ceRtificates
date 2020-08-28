@@ -38,32 +38,29 @@ generate_certificates <- function(ids_table, base_url) {
 
     # format and normalize name for folders and paths
     participant_name_path <- stringr::str_replace_all(ids_table$name[i], "[[:blank:]]", "_")
+    participant_name_path <- fs::path_sanitize(participant_name_path)
     p_name_path_wt_accent <- stringi::stri_trans_general(participant_name_path, "Latin-ASCII")
+    p_name_path_wt_accent <- fs::path_sanitize(p_name_path_wt_accent)
     if (!isTRUE(fs::dir_exists(glue::glue("certs/{p_name_path_wt_accent}")))) {
       fs::dir_create(glue::glue("certs/{p_name_path_wt_accent}"))
     }
 
     category <- ids_table$type[i]
     edition <- ids_table$edition[i]
-    if (isTRUE(category == "minicurso")) {
-      category_path <- ids_table$course[i] %>%
-        stringr::str_squish() %>%
-        stringr::str_replace_all("[[:blank:]]", "_") %>%
-        stringr::str_replace_all("/", "-") %>%
-        stringi::stri_trans_general("Latin-ASCII")
-    } else {
-      category_path <- category
-    }
-    # write to temp file
+    category_path <-ids_table$type[i]
+    course_name_path <- ids_table$course[i] %>%
+      stringr::str_squish() %>%
+      stringr::str_replace_all("[[:blank:]]", "_") %>%
+      stringr::str_replace_all("/", "-") %>%
+      stringi::stri_trans_general("Latin-ASCII") %>%
+      fs::path_sanitize()
     participant_html %>%
-      readr::write_lines(glue::glue("temp/{p_name_path_wt_accent}-{category_path}-CV_bioinfo_{edition}-UFMG.html"))
-    # generate pdf certificate
-    # pagedown::find_chrome()
-    if (!isTRUE(fs::dir_exists("certs"))) {
-      fs::dir_create("certs")
-    }
+      readr::write_lines(glue::glue("temp/{p_name_path_wt_accent}-{category_path}-{course_name_path}-CV_bioinfo_{edition}-UFMG.html"))
   }
-  return_list <- 1:nrow(ids_table) %>%
+  return_list <- seq_len(nrow(ids_table)) %>%
     purrr::map(gen_cert_html)
+  if (!isTRUE(fs::dir_exists("certs"))) {
+    fs::dir_create("certs")
+  }
 }
 
