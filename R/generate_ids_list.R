@@ -15,10 +15,31 @@ generate_ids_list <- function(ids_table, event_data) {
       temp_list$name <- ids_table$name[i]
       temp_list$cert_url <- as.character(glue::glue("{event_data$base_url}{ids_table$edition[i]}/{ids_table$id_short[i]}"))
       temp_list$qrcode_path <- as.character(glue::glue("qrcode/{ids_table$id_short[i]}.svg"))
+      temp_list$path_name <- ids_table$name[i] %>%
+        sanitize_string_path()
+      temp_list$path_course <- ids_table$course[i] %>%
+        sanitize_string_path()
+      temp_list$html_path <- as.character(glue::glue(
+        "temp/{temp_list$path_name}-{temp_list$type}-{temp_list$path_course}-CV_bioinfo_{temp_list$edition}-UFMG.html"
+      ))
+      temp_list$pdf_path <- as.character(glue::glue(
+        "certs/{temp_list$path_name}/{temp_list$path_name}-{temp_list$type}-{temp_list$path_course}-CV_bioinfo_{temp_list$edition}-UFMG.pdf"
+      ))
       return(temp_list)
     })
   names(ids_list) <- ids_table$id_short
   return(ids_list)
+}
+
+#' Sanitize Strings for Path Usage
+sanitize_string_path <- function(string) {
+  clean_string <- string %>%
+    stringr::str_squish() %>%
+    stringr::str_replace_all("[[:blank:]]", "_") %>%
+    stringr::str_replace_all("/", "-") %>%
+    stringi::stri_trans_general("Latin-ASCII") %>%
+    fs::path_sanitize()
+  return(clean_string)
 }
 
 #' Replace User Strings from template Markdown or HTML
@@ -38,6 +59,5 @@ replace_template_strings <- function(template_file_path, temp_list) {
     stringr::str_replace("##QRCODE_PATH##", temp_list$qrcode_path) %>%
     stringr::str_replace("##PARTICIPANT_NAME##", temp_list$name) %>%
     stringr::str_replace("##COURSE_TITLE##", temp_list$course)
-
   return(replaced_strings_file)
 }
