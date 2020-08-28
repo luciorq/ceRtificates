@@ -6,29 +6,17 @@
 #' @inheritParams event_data
 #' @export
 update_api <- function(ids_table, event_data) {
-  # ids_table <- id_table
-  # repo <- "cvbioinfoufmg/certificates"
-  # edition <- "2020"
-
   if (isTRUE(event_data$use_github_repo)) {
     repo <- event_data$cert_repo
     edition <- event_data$edition
   } else {
     stop("field event_data$use_github_repo from config file is not set")
   }
-
-  previous_wd <- fs::path_wd()
-  fs::dir_create("temp_repo")
-  setwd(fs::path("temp_repo"))
-  # isolate repo creation function
-  # TODO use packaget gert? gh?
-  # TODO check for https or ssh preference; currently ssh
-  sys::exec_wait("git", args = c("clone", glue::glue("git@github.com:{repo}.git")))
-  setwd(fs::path(basename(repo)))
-  fs::dir_create(edition)
+  edition_path <- create_edition_repo(event_data)
 
   # TODO move to prepare_infrastructure
-  path_404 <- fs::path(previous_wd, "templates", "webpage", "404.md")
+  base_wd <- fs::path_wd()
+  path_404 <- fs::path(base_wd, "templates", "webpage", "404.md")
   if (!fs::file_exists(path_404)) {
     fs::file_copy(path_404, edition)
   }
@@ -41,7 +29,7 @@ update_api <- function(ids_table, event_data) {
   long_num <- length(unique(dplyr::pull(ids_table, id)))
   short_num <- length(unique(dplyr::pull(ids_table, id_short)))
   if (!identical(long_num, short_num)) {
-    setwd(previous_wd)
+    setwd(base_wd)
     stop("Short Ids are not unique.")
   }
   # check if there is already certs uploaded
@@ -63,12 +51,24 @@ update_api <- function(ids_table, event_data) {
 
   # Generate folder for each certificate
   # event_data$paths$templates$webpage
-  template_check_html <- fs::path(previous_wd, "templates", "webpage", "certificate_check_template.md")
+  template_check_html <- fs::path(base_wd, "templates", "webpage", "certificate_check_template.md")
   if(!isTRUE(fs::file_exists(template_check_html))) {
-    setwd(previous_wd)
+    setwd(base_wd)
     stop("Template for certificate check not found.")
   }
+
+  #' Generate anonymous Description list
+  generate_ids_list <- function(ids_table) {
+
+    ids_list
+
+    names(ids_list) <- ids_table$id_short
+    return(ids_list)
+  }
+
   check_strings_html <- readr::read_lines(template_check_html)
+
+
   written_mds <- seq_along(ids_table$id_short) %>%
     purrr::map(~{
       # i <- 1
@@ -102,5 +102,28 @@ update_api <- function(ids_table, event_data) {
   sys::exec_wait("git", args = c("commit", "-m", commit_message))
   sys::exec_wait("git", args = c("push"))
   # return to executing folder
-  setwd(previous_wd)
+  setwd(base_wd)
+
+  return(ids_list)
+}
+
+
+####################aux functions #######################
+#' create repo
+create_edition_repo <- function(event_data) {
+  repo <- event_data$cert_repo
+  edition <- event_data$edition
+  base_wd <- fs::path_wd()
+  fs::dir_create(fs::path(base_wd, "temp_repo"))
+  repo_name <- basename(repo)
+  path_to_clone <- fs::path(base_wd, "temp_repo", repo_name)
+  # TODO use packaget gert? gh?
+  # TODO check for https or ssh preference; currently ssh; https in container
+  sys::exec_wait(
+    cmd = "git",
+    args = c("clone", glue::glue("git@github.com:{repo}.git"), path_to_clone)
+  )
+  edition_path <- fs::path(path_to_clone, edition)
+  fs::dir_create(edition_path)
+  return(edition_path)
 }
