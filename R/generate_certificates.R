@@ -1,8 +1,8 @@
 #' Generate PDF certificate
 #' @inheritParams prepare_data
-#' @param base_site Webpage to be linked
+#' @param base_url Webpage to be linked
 #' @export
-generate_certificates <- function(ids_table, base_site) {
+generate_certificates <- function(ids_table, base_url) {
   # ids_table = id_table
   ids_table <- ids_table %>%
     dplyr::mutate(id_short = stringr::str_extract(id, ".{8}")) %>%
@@ -12,11 +12,10 @@ generate_certificates <- function(ids_table, base_site) {
   # Generate qrcode for the id
   # i = 1
   for (i in 1:nrow(ids_table)) {
-    qr_code_string <- generate_qrcode(ids_table$id_short[i], base_site, ids_table$edition[i])
+    qr_code_string <- generate_qrcode(ids_table$id_short[i], base_url, ids_table$edition[i])
     #fs::filefs::path("temp", "qrcode", glue::glue("{ids_table$id_short[i]}.svg"))
   }
   # Function to generate cert in parallel
-  # i = 1
   # for (i in 1:nrow(ids_table)) {
   gen_cert_html <- function(i) {
     template_html_path <- glue::glue("templates/html/certificate_{ids_table$type[i]}_template.html")
@@ -25,7 +24,7 @@ generate_certificates <- function(ids_table, base_site) {
     qrcode_path <- glue::glue("qrcode/{ids_table$id_short[i]}.svg")
 
 
-    cert_url <- as.character(glue::glue("{base_site}{ids_table$edition[i]}/{ids_table$id_short[i]}"))
+    cert_url <- as.character(glue::glue("{base_url}{ids_table$edition[i]}/{ids_table$id_short[i]}"))
 
     # Replace strings in the template
     participant_html <- template_html %>%

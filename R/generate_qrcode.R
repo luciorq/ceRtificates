@@ -1,12 +1,12 @@
 #' Generate qrcode to check certificates
 #' @param identifier hash used to lookup
-#' @param base_site URL to be added to the qrcode link
+#' @param base_url URL to be added to the qrcode link
 #' @param edition Edition of the event
 #' @export
-generate_qrcode <- function(identifier, base_site, edition) {
+generate_qrcode <- function(identifier, base_url, edition) {
   # create shorter id
-  #identifier = ids_table$id_short[i]; base_site = base_site; edition = ids_table$edition[i];
-  qrcode_string <- as.character(glue::glue("{base_site}{edition}/{identifier}"))
+  #identifier = ids_table$id_short[i]; base_url = base_url; edition = ids_table$edition[i];
+  qrcode_string <- as.character(glue::glue("{base_url}{edition}/{identifier}"))
   margin_value <- 2
   # square_side <- 7
   qrcode_string %>%
