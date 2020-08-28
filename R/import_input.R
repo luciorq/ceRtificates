@@ -54,23 +54,24 @@ import_table <- function(event_data, input_path = NULL, ext = NULL) {
   if (is.null(ext)) {
     ext <- event_data$participant_table$ext
   }
-
   categories_vector <- unique(event_data$cert_type)
   sheets_vector <- read_sheets_vector(input_path, ext)
   # remove lookup tables
   sheets_vector <- sheets_vector[!stringr::str_detect(sheets_vector, "_lookup$")]
+  # read all sheets from input table
+  imported_list <- sheets_vector %>%
+    purrr::map(~import_sheet(input_path, sheet = .x, ext = ext))
+  names(imported_list) <- sheets_vector
 
   # join category tables
-  categories_list <- list()
-  # i = categories_vector[1]; j = sheets_vector[1]
-  # i = categories_vector[1]; j = sheets_vector[2]
-  for (i in categories_vector) {
+  categories_list <- categories_vector %>%
+  purrr::map(~{
     category_df <- tibble::tibble()
     for (j in sheets_vector) {
-      temp_df <- import_sheet(input_path, sheet = j, ext = ext)
-      if (isTRUE(i == j) && !any(colnames(temp_df) %in% "category")) {
+      temp_df <- imported_list[[j]]
+      if (isTRUE(.x == j) && !any(colnames(temp_df) %in% "category")) {
         temp_df <- temp_df %>%
-          dplyr::mutate(category = i)
+          dplyr::mutate(category = .x)
       }
       # Check for registration in the main event
       if (any(colnames(temp_df) %in% "registration")) {
@@ -85,25 +86,64 @@ import_table <- function(event_data, input_path = NULL, ext = NULL) {
       category_df <- dplyr::bind_rows(category_df, temp_df)
     }
     category_df <- category_df %>%
-      dplyr::filter(category %in% i) %>%
+      dplyr::filter(category %in% .x) %>%
       dplyr::distinct()
-    categories_list[[i]] <- category_df
-  }
+    #categories_list[[i]]
+    category_df
+  })
+  names(categories_list) <- categories_vector
+
   # import course table
   course_table <- import_sheet(input_path, sheet = "course_lookup", ext = ext)
+
+  duplicate_course_names <- course_table %>%
+    dplyr::distinct() %>%
+    dplyr::group_by(course_name) %>%
+    dplyr::summarise(num = dplyr::n()) %>%
+    dplyr::filter(num > 1) %>%
+    dplyr::pull(course_name)
+
+  if (length(duplicate_course_names) > 0) {
+    duplicate_course_names <- stringr::str_c(duplicate_course_names, collapse = ", ")
+    stop(glue::glue("You have duplicate course and/or workshop names\nCheck those: {duplicate_course_names}"))
+  }
+
   course_table <- course_table %>%
     dplyr::mutate(edition = event_data$edition)
-  # flatten categories list
-  full_df <- tibble::tibble()
-  # i = names(categories_list)[1]
-  for (i in names(categories_list)) {
-    temp_df <- categories_list[[i]] %>%
-      dplyr::select(name, email, course_name, category) %>%
-      drop_na_cols() %>%
-      dplyr::left_join(course_table) %>%
-      dplyr::distinct()
-    full_df <- dplyr::bind_rows(full_df, temp_df)
-  }
+
+    # flatten categories list
+  columns_in_course_table <- unique(course_table$category)
+
+ # temp_df <- categories_list$monitor_minicurso
+  full_df <- names(categories_list) %>%
+    purrr::map_df(~{
+      temp_df <- categories_list[[.x]]
+      temp_df <- temp_df %>%
+        dplyr::select(name, email, course_name, category) %>%
+        drop_na_cols()
+      ##
+      message(glue::glue("Tab: {.x}\nColumns used: {stringr::str_c(colnames(temp_df), collapse = ', ')}\n\n"))
+      ##
+      if ((unique(temp_df$category) %in% columns_in_course_table)) {
+        columns_to_join <- c("course_name", "category")
+      } else {
+        columns_to_join <- c("course_name")
+      }
+      if (isTRUE(sum(colnames(temp_df) %in% c("course_name", "category")) == 1)) {
+        if (isTRUE(any(colnames(temp_df) %in% "course_name") && !any(colnames(temp_df) %in% "category"))) {
+          columns_to_join <- c("course_name")
+        }
+        if (isTRUE(any(colnames(temp_df) %in% "category") && !any(colnames(temp_df) %in% "course_name"))) {
+          columns_to_join <- c("category")
+        }
+      }
+      joined_df <- temp_df %>%
+        dplyr::left_join(course_table, columns_to_join, suffix = c("", "_to_remove")) %>%
+        dplyr::distinct() %>%
+        dplyr::select(-dplyr::ends_with("_to_remove"))
+      joined_df
+    })
+
   # format and validate strings
   full_df <- format_cols(full_df)
   return(full_df)
@@ -138,7 +178,6 @@ format_cols <- function(full_df) {
     dplyr::filter(valid_df, is.na(participant_name))
   }
 }
-
 
 ######################################### deprecated ############ to be removed
 #' Format input table for missing certs
