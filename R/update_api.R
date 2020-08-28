@@ -22,6 +22,7 @@ update_api <- function(ids_table, event_data) {
   }
 
   # create shorter id
+  # TODO check if 8 is enough
   # TODO add a loop that increase number if length is not equal
   ids_table <- ids_table %>%
     dplyr::mutate(id_short = stringr::str_extract(id, ".{8}"))
@@ -29,80 +30,54 @@ update_api <- function(ids_table, event_data) {
   long_num <- length(unique(dplyr::pull(ids_table, id)))
   short_num <- length(unique(dplyr::pull(ids_table, id_short)))
   if (!identical(long_num, short_num)) {
-    setwd(base_wd)
     stop("Short Ids are not unique.")
   }
   # check if there is already certs uploaded
   json_to_save <- ids_table %>%
     dplyr::select(-name)
 
-  json_file_path <- fs::path(edition, "cert.json")
+  json_file_path <- fs::path(edition_path, "cert.json")
   if (fs::file_exists(json_file_path)) {
     saved_json <- jsonlite::fromJSON(json_file_path)
     saved_long_ids <- dplyr::pull(tibble::as_tibble(saved_json), id)
     json_to_save <- json_to_save %>%
       dplyr::filter(!(id %in% saved_long_ids))
+    json_to_save <- saved_json %>%
+      tibble::as_tibble() %>%
+      dplyr::bind_rows(json_to_save)
   }
-
   # save new jsons, appending file if necessary
   json_to_save %>%
     jsonlite::toJSON(pretty = TRUE) %>%
-    readr::write_lines(json_file_path, append = TRUE)
+    readr::write_lines(json_file_path)
+  # Check if json can be loaded
+  test_json <- jsonlite::fromJSON(json_file_path)
+  rm(test_json)
 
+  ids_list <- generate_ids_list(ids_table, event_data)
   # Generate folder for each certificate
   # event_data$paths$templates$webpage
   template_check_html <- fs::path(base_wd, "templates", "webpage", "certificate_check_template.md")
-  if(!isTRUE(fs::file_exists(template_check_html))) {
-    setwd(base_wd)
+  if (!isTRUE(fs::file_exists(template_check_html))) {
     stop("Template for certificate check not found.")
   }
-
-  #' Generate anonymous Description list
-  generate_ids_list <- function(ids_table) {
-
-    ids_list
-
-    names(ids_list) <- ids_table$id_short
-    return(ids_list)
-  }
-
-  check_strings_html <- readr::read_lines(template_check_html)
-
-
-  written_mds <- seq_along(ids_table$id_short) %>%
+  #check_strings_html <- readr::read_lines(template_check_html)
+  written_mds <- names(ids_list) %>%
     purrr::map(~{
-      # i <- 1
-      i <- .x
-      fs::dir_create(fs::path(edition, ids_table$id_short[i]))
-      correct_strings_html <- check_strings_html %>%
-        stringr::str_replace("##CERT_ID##", ids_table$id_short[i]) %>%
-        stringr::str_replace("##CERT_TYPE##", ids_table$type[i]) %>%
-        stringr::str_replace("##COURSE##", ids_table$course[i]) %>%
-        stringr::str_replace("##EVENT_DATE##", ids_table$date[i]) %>%
-        stringr::str_replace("##CERT_HOURS##", ids_table$hours[i]) %>%
-        stringr::str_replace("##EVENT_EDITION##", ids_table$edition[i]) %>%
-        stringr::str_replace("##FULL_ID##", ids_table$id[i])
-
+      # temp_list <- ids_list[[names(ids_list)[1]]]
+      temp_list <- ids_list[[.x]]
+      # Generate folder for each certificate
+      fs::dir_create(fs::path(edition_path, temp_list$id_short))
+      correct_strings_html <- template_check_html %>%
+        replace_template_strings(temp_list)
       correct_strings_html %>%
-        readr::write_lines(fs::path(edition, ids_table$id_short[i], "index.md"))
+        readr::write_lines(fs::path(edition_path, temp_list$id_short, "index.md"))
+      temp_list
   })
+  rm(written_mds)
 
-  commit_date <- Sys.time() %>%
-    as.character() %>%
-    stringr::str_remove(".{2}") %>%
-    stringr::str_remove_all("-") %>%
-    stringr::str_remove_all(":") %>%
-    stringr::str_replace("[[:blank:]]", "-") %>%
-    stringr::str_remove(".{2}$")
-
-  commit_message <- glue::glue("update cert list {commit_date}")
-
-  sys::exec_wait("git", args = c("add", edition))
-  sys::exec_wait("git", args = c("add", glue::glue("{edition}/cert.json")))
-  sys::exec_wait("git", args = c("commit", "-m", commit_message))
-  sys::exec_wait("git", args = c("push"))
-  # return to executing folder
-  setwd(base_wd)
+  # update and push remote repo
+  update_edition_repo(repo, edition)
 
   return(ids_list)
 }
@@ -126,4 +101,32 @@ create_edition_repo <- function(event_data) {
   edition_path <- fs::path(path_to_clone, edition)
   fs::dir_create(edition_path)
   return(edition_path)
+}
+
+#' update repo
+update_edition_repo <- function(repo, edition) {
+  repo_path <- fs::path("temp_repo", basename(repo))
+  sys::exec_wait(cmd = "git", args = c("-C", repo_path, "status"))
+  sys::exec_wait(cmd = "git", args = c("-C", repo_path, "add", edition))
+  sys::exec_wait(
+    cmd = "git",
+    args = c("-C", repo_path, "add", glue::glue("{edition}/cert.json"))
+  )
+
+  commit_date <- Sys.time() %>%
+    as.character() %>%
+    stringr::str_remove(".{2}") %>%
+    stringr::str_remove_all("-") %>%
+    stringr::str_remove_all(":") %>%
+    stringr::str_replace("[[:blank:]]", "-") %>%
+    stringr::str_remove(".{2}$")
+
+  commit_message <- glue::glue("update cert list {commit_date}")
+
+  sys::exec_wait(
+    cmd = "git",
+    args = c("-C", repo_path, "commit", "-m", commit_message)
+  )
+  sys::exec_wait(cmd = "git", args = c("-C", repo_path, "push"))
+  message("Repo updated")
 }
