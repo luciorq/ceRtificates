@@ -88,7 +88,6 @@ import_table <- function(event_data, input_path = NULL, ext = NULL) {
     category_df <- category_df %>%
       dplyr::filter(category %in% .x) %>%
       dplyr::distinct()
-    #categories_list[[i]]
     category_df
   })
   names(categories_list) <- categories_vector
@@ -96,13 +95,14 @@ import_table <- function(event_data, input_path = NULL, ext = NULL) {
   # import course table
   course_table <- import_sheet(input_path, sheet = "course_lookup", ext = ext)
 
+  # check for duplicate course names
   duplicate_course_names <- course_table %>%
     dplyr::distinct() %>%
     dplyr::group_by(course_name) %>%
     dplyr::summarise(num = dplyr::n()) %>%
+    dplyr::ungroup() %>%
     dplyr::filter(num > 1) %>%
     dplyr::pull(course_name)
-
   if (length(duplicate_course_names) > 0) {
     duplicate_course_names <- stringr::str_c(duplicate_course_names, collapse = ", ")
     stop(glue::glue("You have duplicate course and/or workshop names\nCheck those: {duplicate_course_names}"))
@@ -114,21 +114,23 @@ import_table <- function(event_data, input_path = NULL, ext = NULL) {
     # flatten categories list
   columns_in_course_table <- unique(course_table$category)
 
- # temp_df <- categories_list$monitor_minicurso
+  # temp_df <- categories_list$monitor_minicurso
+  # temp_df <- categories_list$participante
   full_df <- names(categories_list) %>%
     purrr::map_df(~{
       temp_df <- categories_list[[.x]]
       temp_df <- temp_df %>%
         dplyr::select(name, email, course_name, category) %>%
         drop_na_cols()
-      ##
       message(glue::glue("Tab: {.x}\nColumns used: {stringr::str_c(colnames(temp_df), collapse = ', ')}\n\n"))
-      ##
+
+      ## check for the presence of columns category and course_name in original table
       if ((unique(temp_df$category) %in% columns_in_course_table)) {
         columns_to_join <- c("course_name", "category")
       } else {
         columns_to_join <- c("course_name")
       }
+
       if (isTRUE(sum(colnames(temp_df) %in% c("course_name", "category")) == 1)) {
         if (isTRUE(any(colnames(temp_df) %in% "course_name") && !any(colnames(temp_df) %in% "category"))) {
           columns_to_join <- c("course_name")
@@ -137,11 +139,33 @@ import_table <- function(event_data, input_path = NULL, ext = NULL) {
           columns_to_join <- c("category")
         }
       }
+
+      # check if course_name is complete for categories that only have one option
+      if (any(colnames(temp_df) %in% "course_name")) {
+        if (any(is.na(unique(dplyr::pull(temp_df, course_name))))) {
+          if (isTRUE(length(unique(dplyr::pull(temp_df, category))) == 1)) {
+            category_to_filter <- unique(dplyr::pull(temp_df, category))
+            course_name_to_fill <- course_table %>%
+              dplyr::filter(category %in% category_to_filter) %>%
+              dplyr::pull(course_name) %>%
+              unique()
+            if (isTRUE(length(course_name_to_fill) != 1)) {
+              stop("This category should have only one course name.")
+            }
+            temp_df <- temp_df %>%
+              dplyr::mutate(course_name = course_name_to_fill)
+          } else {
+            stop("Missing course names.")
+          }
+        }
+      }
+
+      # join course information
       joined_df <- temp_df %>%
         dplyr::left_join(course_table, columns_to_join, suffix = c("", "_to_remove")) %>%
         dplyr::distinct() %>%
         dplyr::select(-dplyr::ends_with("_to_remove"))
-      joined_df
+      return(joined_df)
     })
 
   # format and validate strings
