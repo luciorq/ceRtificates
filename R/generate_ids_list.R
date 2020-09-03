@@ -13,6 +13,7 @@ generate_ids_list <- function(ids_table, event_data) {
       temp_list$edition <- ids_table$edition[i]
       temp_list$id <- ids_table$id[i]
       temp_list$name <- ids_table$name[i]
+      temp_list$email <- ids_table$email[i]
       temp_list$cert_url <- as.character(glue::glue("{event_data$base_url}{ids_table$edition[i]}/{ids_table$id_short[i]}"))
       temp_list$qrcode_path <- as.character(glue::glue("qrcode/{ids_table$id_short[i]}.svg"))
       temp_list$path_name <- ids_table$name[i] %>%

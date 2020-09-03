@@ -34,7 +34,7 @@ update_api <- function(ids_table, event_data) {
   }
   # check if there is already certs uploaded
   json_to_save <- ids_table %>%
-    dplyr::select(-name)
+    dplyr::select(-c(name, email))
 
   json_file_path <- fs::path(edition_path, "cert.json")
   if (fs::file_exists(json_file_path)) {
