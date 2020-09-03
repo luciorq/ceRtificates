@@ -16,9 +16,10 @@ update_api <- function(ids_table, event_data) {
 
   # TODO move to prepare_infrastructure
   base_wd <- fs::path_wd()
-  path_404 <- fs::path(base_wd, "templates", "webpage", "404.md")
-  if (!fs::file_exists(path_404)) {
-    fs::file_copy(path_404, edition)
+  path_template_404 <- fs::path(base_wd, "templates", "webpage", "404.md")
+  path_repo_404 <- fs::path(edition_path, "404.md")
+  if (!fs::file_exists(path_repo_404)) {
+    fs::file_copy(path_template_404, path_repo_404)
   }
 
   # create shorter id
@@ -35,7 +36,10 @@ update_api <- function(ids_table, event_data) {
   # check if there is already certs uploaded
   json_to_save <- ids_table %>%
     dplyr::select(-c(name, email))
-
+  # break if table is not complete
+  if (!isTRUE(all(complete.cases(json_to_save)))) {
+    stop("\nTable is not complete. Probably NAs in some row.\ncheck with `complete.cases()`")
+  }
   json_file_path <- fs::path(edition_path, "cert.json")
   if (fs::file_exists(json_file_path)) {
     saved_json <- jsonlite::fromJSON(json_file_path)
