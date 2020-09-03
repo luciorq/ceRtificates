@@ -9,4 +9,4 @@
 - [ ] Read input table from Google Sheets
 - [X] Select definitive name. Proposed names: ceRticates, certicateR and eventCerts
 - [ ] Add option for SSH and HTTPS on GitHub repo creation
-- [ ] use `geRt` or `gh` on GitHub repo creation
+- [ ] use `geRt` or `gh` for GitHub repo creation
