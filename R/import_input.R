@@ -190,48 +190,4 @@ format_cols <- function(full_df) {
       event_date, cert_hours, edition
     )
   return(valid_df)
-  if (FALSE) {
-    dplyr::filter(full_df, is.na(course_name))
-    dplyr::filter(full_df, is.na(email))
-    dplyr::filter(full_df, is.na(category))
-    dplyr::filter(full_df, is.na(name))
-
-    dplyr::filter(valid_df, is.na(course))
-    dplyr::filter(valid_df, is.na(valid_email))
-    dplyr::filter(valid_df, is.na(category))
-    dplyr::filter(valid_df, is.na(participant_name))
-  }
-}
-
-######################################### deprecated ############ to be removed
-#' Format input table for missing certs
-#' @inheritParams import_table
-import_table_missing <- function(input_path2, course_table, ext) {
-  sheets_vector <- readxl::excel_sheets(input_path2)
-  missing_table <- readxl::read_xlsx(input_path2, sheet = sheets_vector[2])
-  missing_table <- missing_table %>%
-    dplyr::filter(situacao %in% c("requisitou certificado faltante")) %>%
-    dplyr::select(Minicurso, `Nome do Aluno`, Email)
-
-  # Validate email through RegExp
-  email_regex <- "^[[:alnum:].\\-_]+@[[:alnum:].\\-]+$"
-  missing_table <- missing_table %>%
-    dplyr::mutate(participant_name = stringr::str_to_title(`Nome do Aluno`)) %>%
-    dplyr::mutate(participant_name = stringr::str_squish(participant_name)) %>%
-    dplyr::mutate(valid_email = stringr::str_match(`Email`, email_regex)) %>%
-    dplyr::mutate(valid_email = as.vector(.$valid_email)) %>%
-    dplyr::mutate(valid_email = stringr::str_to_lower(valid_email)) %>%
-    dplyr::mutate(course_name = stringr::str_squish(Minicurso))
-
-  course_table2 <- dplyr::select(course_table, -sheet_name)
-
-  missing_table <- missing_table %>%
-    dplyr::distinct() %>%
-    dplyr::select(course_name, participant_name, valid_email) %>%
-    # dplyr::mutate(cetegory = dplyr::if_else(
-    #     course_name == "Evento Principal", "participante", course_name
-    # )) %>%
-    dplyr::left_join(course_table2, by = c("course_name" = "course")) %>%
-    dplyr::rename(course = course_name)
-  return(missing_table)
 }

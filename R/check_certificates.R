@@ -13,7 +13,7 @@ check_certificates <- function(ids_list, event_data, min_size_pdf = NULL) {
       # furrr::future_map(~{})
       purrr::map(~{
         temp_list <- ids_list[[.x]]
-        gen_cert_pdf(temp_list)
+        gen_cert_pdf(temp_list, min_size_pdf)
       })
     # future::plan(future::sequential)
     if (is.null(min_size_pdf)) {
@@ -29,6 +29,8 @@ check_certificates <- function(ids_list, event_data, min_size_pdf = NULL) {
     cert_number <- cert_number - wrong_size_files
     message("Certs with wrong size:", "\n", paste0("    ",vector_pdf_path[as.numeric(fs::file_size(vector_pdf_path))/1024 <= min_size_pdf], sep = "\n"))
   }
+  message("Generated all PDF certificates.")
+  message(glue::glue("{cert_number} certificates ready."))
 }
 
 #' Check pdf certs size distribution
