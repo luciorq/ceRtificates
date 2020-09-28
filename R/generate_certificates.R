@@ -18,6 +18,13 @@ generate_certificates <- function(ids_list, event_data) {
       temp_list <- ids_list[[.x]]
       gen_cert_html(temp_list)
     })
+
+
+  ## Check if generated certs number are right
+  if (length(fs::dir_ls("temp/", glob = "*.html")) != length(unique(names(ids_list)))) {
+    stop("HTML templates are in different numbers from input table.")
+  }
+
 }
 
 #' Function to generate HTML certificates
@@ -36,11 +43,6 @@ gen_cert_html <- function(temp_list) {
   html_certificate_output <- fs::path(temp_list$html_path)
   participant_html %>%
     readr::write_lines(html_certificate_output)
-
-  ## Check if generated certs number are right
-  if (length(fs::dir_ls("temp/", glob = "*.html")) != length(unique(names(ids_list)))) {
-    stop("HTML templates are in different numbers from input table.")
-  }
 }
 
 ########### PDF cert

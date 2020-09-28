@@ -61,7 +61,7 @@ send_certificates <- function(ids_list, event_data) {
       send_email_with_attachment(temp_list, event_data)
     })
 
-  # FIXME replace short ids in the sent_log txt
+  # FIXME replace short ids that are repeated in the sent_log txt
   message("Sent all e-mails.")
 }
 
@@ -108,7 +108,6 @@ send_email_with_attachment <- function(temp_list, event_data) {
       filename = basename(attachment_file)
     )
   }
-
   # format email subject
   if (event_data$event_lang == "ptbr") {
     subject_string <- "Certificado"
@@ -133,13 +132,11 @@ send_email_with_attachment <- function(temp_list, event_data) {
 
   # use random times between send to do not spam, not sure if it works
   Sys.sleep(round(runif(1, min = 3, max = 8)))
-
   # FIXME testing
   for (i in attachment_vector) {
     glue::glue("{temp_list$id_short},{email_to_send},{i}") %>%
       readr::write_lines("log_emails/sent_log.txt", append = TRUE)
   }
-
   # end of testing
   return(0)
 }

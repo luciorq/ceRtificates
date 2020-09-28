@@ -4,11 +4,14 @@
 #' @export
 check_certificates <- function(ids_list, event_data, min_size_pdf = NULL) {
   # Check number of possible certificates
-  vector_pdf_path <- fs::dir_ls(fs::dir_ls("certs"))
-  cert_number <- length(vector_pdf_path)
+  vector_pdf_path <- purrr::map_chr(ids_list, ~{unlist(.x)["pdf_path"]})
+  certs_to_be_created <- vector_pdf_path[fs::file_exists(vector_pdf_path)]
+  certs_in_folder <- fs::dir_ls(fs::dir_ls("certs"))
+  already_created_pdf_path <- certs_to_be_created[certs_to_be_created %in% certs_in_folder]
   # Just stop when every file is ready
-  while (length(ids_list) != cert_number) {
+  while (length(ids_list) != length(already_created_pdf_path)) {
     return_list <- names(ids_list) %>%
+      # TODO implement
       # future::plan(future::multisession, workers = 16)
       # furrr::future_map(~{})
       purrr::map(~{
@@ -17,36 +20,31 @@ check_certificates <- function(ids_list, event_data, min_size_pdf = NULL) {
       })
     # future::plan(future::sequential)
     if (is.null(min_size_pdf)) {
-      min_size_pdf <- check_files_size_distribution("certs")
+      min_size_pdf <- check_files_size_distribution(already_created_pdf_path)
     }
-
-    # update value for while condition
-    vector_pdf_path <- fs::dir_ls(fs::dir_ls("certs"))
-    cert_number <- length(vector_pdf_path)
-    cert_missing_number <- length(ids_list) - cert_number
-    print(cert_missing_number)
-    wrong_size_files <- sum(as.numeric(fs::file_size(vector_pdf_path))/1024 <= min_size_pdf)
-    cert_number <- cert_number - wrong_size_files
-    message("Certs with wrong size:", "\n", paste0("    ",vector_pdf_path[as.numeric(fs::file_size(vector_pdf_path))/1024 <= min_size_pdf], sep = "\n"))
+    # update value of already created certificates
+    already_created_pdf_path <- certs_to_be_created[certs_to_be_created %in% already_created_pdf_path]
+    wrong_size_files <- already_created_pdf_path[as.numeric(fs::file_size(already_created_pdf_path))/1024 <= min_size_pdf]
+    # remove wrong size files from already created vector
+    wrong_size_files <- already_created_pdf_path[!(already_created_pdf_path %in% wrong_size_files)]
+    if (length(wrong_size_files) > 0) {
+      message(
+        "Certs with wrong size:", "\n", paste0("    ", wrong_size_files, collapse = "\n")
+      )
+    }
   }
   message("Generated all PDF certificates.")
-  message(glue::glue("{cert_number} certificates ready."))
+  message(glue::glue("{length(already_created_pdf_path)} certificates ready."))
 }
 
 #' Check pdf certs size distribution
 #' Check mean file size to garantee that they were generated correctly
-check_files_size_distribution <- function(cert_path = "certs") {
-  cert_path_vector <- fs::dir_ls(fs::dir_ls(cert_path))
+check_files_size_distribution <- function(already_created_pdf_path) {
+  cert_path_vector <- already_created_pdf_path
   cert_size_vector <- as.numeric(fs::file_size(cert_path_vector))/1024
   cert_size_vector <- sort(cert_size_vector, decreasing = TRUE)
-  # uses mean size of the gets
-  min_size_pdf <- mean(cert_size_vector[seq_len(floor(length(cert_size_vector)/10))]) * 0.95
-  # sd(cert_size_vector[seq_len(floor(length(cert_size_vector)/10))])
-  # cert_path_vector <- fs::dir_ls(fs::dir_ls(cert_path))
-  # cert_size_vector <- as.numeric(fs::file_size(cert_path_vector))/1024
-  # cert_size_vector <- sort(cert_size_vector, decreasing = TRUE)
-  # median(cert_size_vector)
-  # sd(cert_size_vector)
-
+  min_size_pdf <- mean(cert_size_vector) * 0.95
+  # mad(cert_size_vector)
+  # sd(cert_size_vector, na.rm = TRUE)
   return(min_size_pdf)
 }
